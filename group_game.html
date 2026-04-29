@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Jungla Pixel Canvas</title>
+</head>
+<body style="margin:0; background:#0a1a0a;">
+<canvas id="bg"></canvas>
+
+<script>
+const canvas = document.getElementById("bg");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+const tile = 8;
+
+// colores verdes (más variedad)
+const greens = [
+  "#0b2e13",
+  "#14532d",
+  "#166534",
+  "#22c55e",
+  "#4ade80"
+];
+
+// fondo
+for (let x = 0; x < canvas.width; x += tile) {
+  for (let y = 0; y < canvas.height; y += tile) {
+    ctx.fillStyle = greens[Math.floor(Math.random() * 3)];
+    ctx.fillRect(x, y, tile, tile);
+  }
+}
+
+// árboles grandes
+for (let i = 0; i < 20; i++) {
+  let x = Math.random() * canvas.width;
+  let height = 200 + Math.random() * 300;
+
+  // tronco
+  ctx.fillStyle = "#3b2f2f";
+  ctx.fillRect(x, canvas.height - height, 20, height);
+
+  // hojas
+  for (let j = 0; j < 100; j++) {
+    ctx.fillStyle = greens[Math.floor(Math.random() * greens.length)];
+    ctx.fillRect(
+      x - 50 + Math.random() * 100,
+      canvas.height - height + Math.random() * 150,
+      tile,
+      tile
+    );
+  }
+}
+</script>
+</body>
+</html>
