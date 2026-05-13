@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Procedural Pixel Art World - Broken Ground</title>
+    <title>Procedural Pixel Art World - True Match Edition</title>
     <style>
         body {
             margin: 0;
@@ -28,23 +28,25 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- PALETTE ---
-const SKY_COLOR = '#3caed6';
-const GRASS_TOP = '#1fc160';
-const GRASS_BASE = '#117b3d';
-const DIRT_TOP = '#aa6644';
-const DIRT_BASE = '#663322';
-const TREE_LEAF_LIGHT = '#2ecc71';
-const TREE_LEAF_DARK = '#27ae60';
-const TREE_TRUNK = '#5c3a21';
+// --- EXACT COLOR PALETTE MATCH ---
+const SKY_COLOR = '#7bc1fa';
+const GRASS_TOP = '#4dbb30';
+const GRASS_BASE = '#115b22';
+const DIRT_TOP = '#be532c';
+const DIRT_BODY = '#802f1a';
+const DIRT_DARK = '#431510';
+const TREE_LEAF_LIGHT = '#6ee139';
+const TREE_LEAF_BASE = '#3da324';
+const TREE_LEAF_SHADOW = '#236916';
+const TREE_TRUNK = '#954422';
 const CLOUD_BODY = '#ffffff';
-const CLOUD_SHADOW = '#b4e1f0';
+const CLOUD_SHADOW = '#9ed2fc';
 
 // --- CONTROLS ---
 let cameraX = 0;
 const scrollSpeed = 2;
 
-// --- PROCEDURAL SPRITES ---
+// --- BITMAP CACHING (Procedural Texture Assets Matching Image Styling) ---
 function createTileSprite(width, height, renderFn) {
     const spriteCanvas = document.createElement('canvas');
     spriteCanvas.width = width;
@@ -53,37 +55,68 @@ function createTileSprite(width, height, renderFn) {
     return spriteCanvas;
 }
 
+// 1. Solid Ground & Step Top Floor Tile
 const groundTile = createTileSprite(32, 32, (c, w, h) => {
-    c.fillStyle = DIRT_BASE; c.fillRect(0, 0, w, h);
-    c.fillStyle = DIRT_TOP; c.fillRect(0, 0, w, 8);
-    c.fillStyle = GRASS_BASE; c.fillRect(0, 0, w, 4);
-    c.fillStyle = GRASS_TOP; c.fillRect(0, 0, w, 2);
+    c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
+    // Heavy Dithering/Noise Texture
+    c.fillStyle = DIRT_TOP; c.fillRect(2, 6, 4, 4); c.fillRect(16, 12, 6, 4); c.fillRect(8, 24, 4, 6);
+    c.fillStyle = DIRT_DARK; c.fillRect(12, 4, 4, 4); c.fillRect(22, 20, 6, 6); c.fillRect(0, 16, 4, 4);
+    // Grass Caps with Hanging Blades/Roots
+    c.fillStyle = GRASS_BASE; c.fillRect(0, 0, w, 8);
+    c.fillStyle = GRASS_TOP; c.fillRect(0, 0, w, 4);
+    // Hanging grass blades details
+    c.fillStyle = GRASS_BASE;
+    c.fillRect(2, 8, 2, 4); c.fillRect(10, 8, 4, 2); c.fillRect(22, 8, 2, 5); c.fillRect(28, 8, 3, 2);
 });
 
-const groundWallTile = createTileSprite(32, 32, (c, w, h) => {
-    c.fillStyle = DIRT_BASE; c.fillRect(0, 0, w, h);
-    c.fillStyle = DIRT_TOP; c.fillRect(0, 0, w, h);
-    c.fillStyle = '#4d2618'; c.fillRect(0, 0, 4, h); // Side shading
+// 2. Vertical Cliff-Cut Wall Tile (For Pit Walls)
+const cliffWallTile = createTileSprite(32, 32, (c, w, h) => {
+    c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
+    // Shadow shading detailing on vertical edges
+    c.fillStyle = DIRT_DARK; c.fillRect(0, 0, 8, h); c.fillRect(14, 8, 6, 8);
+    c.fillStyle = DIRT_TOP; c.fillRect(24, 4, 4, 6); c.fillRect(8, 20, 4, 4);
 });
 
-const platformTile = createTileSprite(48, 16, (c, w, h) => {
-    c.fillStyle = DIRT_BASE; c.fillRect(4, 4, w - 8, h - 4);
-    c.fillStyle = DIRT_TOP; c.fillRect(4, 4, w - 8, 4);
-    c.fillStyle = GRASS_TOP; c.fillRect(2, 0, w - 4, 3);
-    c.fillStyle = GRASS_BASE; c.fillRect(2, 3, w - 4, 1);
+// 3. Compact Bush Sprite
+const bushSprite = createTileSprite(48, 24, (c, w, h) => {
+    c.fillStyle = TREE_LEAF_SHADOW;
+    c.beginPath(); c.arc(12, 16, 8, 0, Math.PI*2); c.arc(24, 14, 10, 0, Math.PI*2); c.arc(36, 16, 8, 0, Math.PI*2); c.fill();
+    c.fillStyle = TREE_LEAF_BASE;
+    c.beginPath(); c.arc(12, 13, 8, 0, Math.PI*2); c.arc(24, 10, 10, 0, Math.PI*2); c.arc(36, 13, 8, 0, Math.PI*2); c.fill();
+    c.fillStyle = TREE_LEAF_LIGHT;
+    c.beginPath(); c.arc(10, 10, 5, 0, Math.PI*2); c.arc(22, 7, 7, 0, Math.PI*2); c.arc(34, 10, 5, 0, Math.PI*2); c.fill();
 });
 
-const treeSprite = createTileSprite(64, 80, (c, w, h) => {
-    c.fillStyle = TREE_TRUNK; c.fillRect(28, 40, 8, 40);
-    c.fillStyle = TREE_LEAF_DARK; c.beginPath(); c.arc(32, 30, 24, 0, Math.PI * 2); c.fill();
-    c.fillStyle = TREE_LEAF_LIGHT; c.beginPath(); c.arc(26, 24, 16, 0, Math.PI * 2); c.arc(40, 26, 14, 0, Math.PI * 2); c.fill();
+// 4. Exact Image Proportions Tree Sprite
+const treeSprite = createTileSprite(64, 96, (c, w, h) => {
+    // Solid thick trunk
+    c.fillStyle = TREE_TRUNK; c.fillRect(26, 48, 12, 48);
+    c.fillStyle = DIRT_DARK; c.fillRect(26, 48, 3, 48); // Trunk outline shadow
+    // Rounded leaf layers
+    c.fillStyle = TREE_LEAF_SHADOW;
+    c.beginPath(); c.arc(32, 32, 28, 0, Math.PI * 2); c.fill();
+    c.fillStyle = TREE_LEAF_BASE;
+    c.beginPath(); c.arc(32, 28, 26, 0, Math.PI * 2); c.fill();
+    c.fillStyle = TREE_LEAF_LIGHT;
+    c.beginPath(); c.arc(24, 20, 16, 0, Math.PI * 2); c.arc(40, 22, 14, 0, Math.PI * 2); c.fill();
 });
 
-const cloudSprite = createTileSprite(96, 40, (c, w, h) => {
+// 5. Accurate Flat-Bottomed Floating Sky Clouds
+const cloudSprite = createTileSprite(80, 32, (c, w, h) => {
     c.fillStyle = CLOUD_SHADOW;
-    c.beginPath(); c.arc(24, 24, 16, 0, Math.PI * 2); c.arc(48, 24, 20, 0, Math.PI * 2); c.arc(72, 24, 16, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(20, 20, 12, 0, Math.PI * 2); c.arc(40, 16, 16, 0, Math.PI * 2); c.arc(60, 20, 12, 0, Math.PI * 2); c.fill();
+    c.fillRect(8, 20, 64, 12);
     c.fillStyle = CLOUD_BODY;
-    c.beginPath(); c.arc(24, 20, 16, 0, Math.PI * 2); c.arc(48, 16, 20, 0, Math.PI * 2); c.arc(72, 20, 16, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(20, 16, 12, 0, Math.PI * 2); c.arc(40, 12, 16, 0, Math.PI * 2); c.arc(60, 16, 12, 0, Math.PI * 2); c.fill();
+    c.fillRect(8, 16, 64, 12);
+});
+
+// 6. Character Mockup Placeholder Sprite
+const playerSprite = createTileSprite(24, 32, (c, w, h) => {
+    c.fillStyle = '#a0522d'; c.fillRect(4, 0, 16, 14); // Hair
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 8, 12, 10); // Face
+    c.fillStyle = '#4682b4'; c.fillRect(4, 18, 16, 10); // Shirt
+    c.fillStyle = '#8b0000'; c.fillRect(6, 28, 4, 4); c.fillRect(14, 28, 4, 4); // Shoes
 });
 
 // --- SEEDED PSEUDO-RANDOM GENERATOR ---
@@ -93,98 +126,86 @@ function seededRandom(seed) {
 }
 
 // --- CHUNK GENERATION ENGINE ---
-const CHUNK_WIDTH = 416; // Adjusted slightly to align tiles cleanly (13 tiles of 32px)
+const CHUNK_WIDTH = 416; // 13 Tiles per unit segment width
 const activeChunks = {};
 
 function generateChunk(chunkIndex) {
-    const objects = { mountains: [], clouds: [], platforms: [], trees: [], potholes: [] };
-    let seed = chunkIndex * 314.15;
-    const groundY = 386;
+    const objects = { steps: [], clouds: [], trees: [], bushes: [], pits: [] };
+    let seed = chunkIndex * 415.26;
 
-    // 1. Procedural Potholes / Ground Pit Holes (0 to 2 per chunk)
-    // Marks specific tile segments along the floor arrays where dirt blocks will be skipped
-    const numPotholes = Math.floor(seededRandom(seed++) * 2.5);
-    const usedTileIndices = new Set();
+    // 1. Layout Segment Elevation and Pits (Matching Image Layout)
+    const segmentPattern = Math.floor(seededRandom(seed++) * 3); 
     
-    for (let i = 0; i < numPotholes; i++) {
-        // Find a random tile block index (from index 2 to 10 to avoid chunk border clipping issues)
-        const tileIndex = 2 + Math.floor(seededRandom(seed++) * 8);
-        const holeWidthTiles = 1 + Math.floor(seededRandom(seed++) * 2); // 1 to 2 tiles wide (32px - 64px wide holes)
-        
-        if (!usedTileIndices.has(tileIndex) && !usedTileIndices.has(tileIndex + 1)) {
-            objects.potholes.push({
-                startTile: tileIndex,
-                widthTiles: holeWidthTiles
-            });
-            // Mark indices to prevent overlapping holes
-            for (let t = 0; t < holeWidthTiles; t++) {
-                usedTileIndices.add(tileIndex + t);
-            }
-        }
+    if (segmentPattern === 0) {
+        // Straight plain floor with an abrupt gap
+        objects.pits.push({ startTile: 6, widthTiles: 2 });
+    } else if (segmentPattern === 1) {
+        // Raised plateau setup step (like the right-center portion of the user image)
+        objects.steps.push({ startTile: 4, widthTiles: 5, heightY: 322 });
+        objects.bushes.push({ x: 6 * 32 }); // Bush sits cleanly on top of the step platform
+    } else {
+        // Deep step valley formation layout
+        objects.steps.push({ startTile: 0, widthTiles: 3, heightY: 322 });
+        objects.pits.push({ startTile: 3, widthTiles: 3 });
+        objects.steps.push({ startTile: 6, widthTiles: 4, heightY: 354 });
     }
 
-    // 2. Mountains (1 to 2 per chunk)
-    const numMountains = 1 + Math.floor(seededRandom(seed++) * 2);
-    for (let i = 0; i < numMountains; i++) {
-        const baseWidth = 90 + Math.floor(seededRandom(seed++) * 70); 
-        const baseHeight = 35 + Math.floor(seededRandom(seed++) * 55); 
-        const startX = seededRandom(seed++) * (CHUNK_WIDTH - baseWidth);
-        
-        objects.mountains.push({ x: startX, y: groundY - baseHeight, w: baseWidth, h: baseHeight });
+    // Collect blocked locations to prevent overlapping decorations on gaps
+    const blockedTiles = new Set();
+    objects.pits.forEach(p => { for(let t=0; t<p.widthTiles; t++) blockedTiles.add(p.startTile + t); });
 
-        if (baseWidth > 110) {
-            objects.mountains.push({ x: startX + 15, y: groundY - baseHeight - 15, w: baseWidth - 30, h: 15 });
-        }
-    }
-
-    // 3. Floating Platforms (Lowered elevation)
-    const numPlatforms = 2 + Math.floor(seededRandom(seed++) * 2);
-    for (let i = 0; i < numPlatforms; i++) {
-        objects.platforms.push({
-            x: seededRandom(seed++) * (CHUNK_WIDTH - 60),
-            y: 220 + (seededRandom(seed++) * 90) 
-        });
-    }
-
-    // 4. Dense Sky-Filled Clouds (6 to 9 per chunk)
-    const numClouds = 6 + Math.floor(seededRandom(seed++) * 4);
+    // 2. High Frequency Clouds Coating Entire Sky Horizon
+    const numClouds = 2 + Math.floor(seededRandom(seed++) * 2);
     for (let i = 0; i < numClouds; i++) {
         objects.clouds.push({
-            x: seededRandom(seed++) * CHUNK_WIDTH,
-            y: 5 + (i * 28) + (seededRandom(seed++) * 15), 
+            x: seededRandom(seed++) * (CHUNK_WIDTH - 80),
+            y: 20 + (i * 35) + (seededRandom(seed++) * 15)
         });
     }
 
-    // 5. Dense Tree Generation (Placed safely away from pothole voids)
-    const numTrees = 2 + Math.floor(seededRandom(seed++) * 3); 
+    // 3. Precision Placed Cliff Edge Trees
+    const numTrees = 1 + Math.floor(seededRandom(seed++) * 2);
     for (let i = 0; i < numTrees; i++) {
-        const treeTileX = Math.floor(seededRandom(seed++) * 11);
-        if (!usedTileIndices.has(treeTileX)) {
-            objects.trees.push({
-                x: treeTileX * 32,
-                y: 310
+        const targetTile = Math.floor(seededRandom(seed++) * 11);
+        if (!blockedTiles.has(targetTile)) {
+            // Check if tree sits on ground or a raised custom step structure
+            let treeY = 306;
+            objects.steps.forEach(s => {
+                if (targetTile >= s.startTile && targetTile < s.startTile + s.widthTiles) {
+                    treeY = s.heightY - 80;
+                }
             });
+            objects.trees.push({ x: targetTile * 32, y: treeY });
+        }
+    }
+
+    // 4. Ground Bushes
+    if (seededRandom(seed++) > 0.4) {
+        const targetTile = Math.floor(seededRandom(seed++) * 10);
+        if (!blockedTiles.has(targetTile) && !blockedTiles.has(targetTile + 1)) {
+            objects.bushes.push({ x: targetTile * 32 });
         }
     }
 
     return objects;
 }
 
-// --- ENGINE LOOPS ---
+// --- RENDERING PIPELINE ---
 function update() {
     cameraX += scrollSpeed;
 }
 
 function draw() {
+    // Smooth Blue Sky Clearance Background
     ctx.fillStyle = SKY_COLOR;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const startChunk = Math.floor(cameraX / CHUNK_WIDTH);
     const endChunk = Math.floor((cameraX + canvas.width) / CHUNK_WIDTH);
 
-    // --- LAYER 1: UNBROKEN PARALLAX CLOUDS ---
+    // --- LAYER 1: SKY HORIZON CLOUDS (Parallax Slower Stretched Layer) ---
     ctx.save();
-    ctx.translate(-cameraX * 0.4, 0);
+    ctx.translate(-cameraX * 0.3, 0);
     for (let i = startChunk - 2; i <= endChunk + 2; i++) {
         if (!activeChunks[i]) activeChunks[i] = generateChunk(i);
         const chunkOffset = i * CHUNK_WIDTH;
@@ -194,71 +215,68 @@ function draw() {
     }
     ctx.restore();
 
-    // --- LAYER 2: FOREGROUND ENVIRONMENT ---
+    // --- LAYER 2: INTERACTIVE GROUND CHUNKS ---
     ctx.save();
     ctx.translate(-cameraX, 0);
 
     for (let i = startChunk; i <= endChunk; i++) {
         const chunkOffset = i * CHUNK_WIDTH;
         const chunk = activeChunks[i];
+        const defaultGroundY = 354; 
 
-        // Draw Mountains
-        chunk.mountains.forEach(mtn => {
-            const worldX = chunkOffset + mtn.x;
-            ctx.fillStyle = '#895135';
-            ctx.fillRect(worldX, mtn.y, mtn.w, mtn.h);
-            ctx.fillStyle = '#6d3c23';
-            ctx.fillRect(worldX, mtn.y, 8, mtn.h);
-            ctx.fillStyle = GRASS_BASE;
-            ctx.fillRect(worldX, mtn.y, mtn.w, 4);
-            ctx.fillStyle = GRASS_TOP;
-            ctx.fillRect(worldX, mtn.y, mtn.w, 2);
-        });
+        // Draw Ground Tiles & Steps with Precision Gaps
+        for (let t = 0; t < 13; t++) {
+            const tileX = chunkOffset + (t * 32);
+            
+            // Check for Pit Gaps
+            let inPit = false;
+            chunk.pits.forEach(p => {
+                if (t >= p.startTile && t < p.startTile + p.widthTiles) inPit = true;
+            });
 
-        // Draw Forest Trees
+            // Check for Custom Step Elevations
+            let currentGroundY = defaultGroundY;
+            chunk.steps.forEach(s => {
+                if (t >= s.startTile && t < s.startTile + s.widthTiles) currentGroundY = s.heightY;
+            });
+
+            if (!inPit) {
+                // Render Floor Surface
+                ctx.drawImage(groundTile, tileX, currentGroundY);
+                // Fill Underneath Base Soil Solid Blocks
+                ctx.fillStyle = DIRT_BODY;
+                ctx.fillRect(tileX, currentGroundY + 32, 32, canvas.height - currentGroundY - 32);
+            } else {
+                // Pit void edge configurations (Exposes rocky cut cliffs on sides)
+                ctx.fillStyle = '#4c1e13'; // Void accent base backfill color
+                ctx.fillRect(tileX, defaultGroundY, 32, canvas.height - defaultGroundY);
+                ctx.drawImage(cliffWallTile, tileX, defaultGroundY);
+                ctx.drawImage(cliffWallTile, tileX, defaultGroundY + 32);
+            }
+        }
+
+        // Draw Foliage Assets On Core Surfaces
         chunk.trees.forEach(tree => {
             ctx.drawImage(treeSprite, chunkOffset + tree.x, tree.y);
         });
 
-        // Draw Lower Elevation Platforms
-        chunk.platforms.forEach(plat => {
-            ctx.drawImage(platformTile, chunkOffset + plat.x, plat.y);
-        });
-
-        // Draw Ground Floor with Dynamic Pothole Voids
-        const groundY = canvas.height - 64;
-        const totalTiles = CHUNK_WIDTH / 32;
-
-        for (let t = 0; t < totalTiles; t++) {
-            // Check if current tile location is marked inside a pothole array configuration
-            let isHole = false;
-            chunk.potholes.forEach(hole => {
-                if (t >= hole.startTile && t < hole.startTile + hole.widthTiles) {
-                    isHole = true;
-                }
+        chunk.bushes.forEach(bush => {
+            // Adjust bush layout height automatically based on if it falls onto step platforms
+            let bushY = defaultGroundY - 14;
+            chunk.steps.forEach(s => {
+                if ((bush.x/32) >= s.startTile && (bush.x/32) < s.startTile + s.widthTiles) bushY = s.heightY - 14;
             });
-
-            const tileX = chunkOffset + (t * 32);
-
-            if (!isHole) {
-                // Regular ground layout blocks
-                ctx.drawImage(groundTile, tileX, groundY);
-                ctx.drawImage(groundTile, tileX, groundY + 32);
-            } else {
-                // If it is a pothole hole, we skip the top layer completely 
-                // and draw exposed vertical soil side-cut walls underground
-                ctx.fillStyle = '#1c0d08'; // Dark backdrop depth for inside pit spaces
-                ctx.fillRect(tileX, groundY, 32, 64);
-                
-                ctx.drawImage(groundWallTile, tileX, groundY + 24);
-                ctx.drawImage(groundWallTile, tileX, groundY + 48);
-            }
-        }
+            ctx.drawImage(bushSprite, chunkOffset + bush.x, bushY);
+        });
     }
+
+    // --- OPTIONAL: STATIC PLAYABLE CHARACTER MOCKUP OVERLAY ---
+    // Places the little character at a fixed position right beside the first edge pit gap
+    ctx.drawImage(playerSprite, cameraX + 160, 322);
 
     ctx.restore();
 
-    // Cache Cleaning
+    // Cache cleanup routines
     for (const key in activeChunks) {
         if (key < startChunk - 4) delete activeChunks[key];
     }
