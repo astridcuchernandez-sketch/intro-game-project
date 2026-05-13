@@ -1,58 +1,198 @@
-<!DOCTYPE html>
-<html>
+<<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Jungla Pixel Canvas</title>
+    <meta charset="UTF-8">
+    <title>Pixel Art Platformer Background</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            image-rendering: pixelated;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+    </style>
 </head>
-<body style="margin:0; background:#0a1a0a;">
-<canvas id="bg"></canvas>
+<body>
+
+<canvas id="gameCanvas" width="800" height="450"></canvas>
 
 <script>
-const canvas = document.getElementById("bg");
-const ctx = canvas.getContext("2d");
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+// --- COLORS (Procedural Pixel Art Palette) ---
+const SKY_COLOR = '#3caed6';
+const GRASS_TOP = '#1fc160';
+const GRASS_BASE = '#117b3d';
+const DIRT_TOP = '#aa6644';
+const DIRT_BASE = '#663322';
+const TREE_LEAF_LIGHT = '#2ecc71';
+const TREE_LEAF_DARK = '#27ae60';
+const TREE_TRUNK = '#5c3a21';
 
-const tile = 8;
+// --- GAME STATE ---
+let scrollOffset = 0;
+const scrollSpeed = 1;
 
-// colores verdes (más variedad)
-const greens = [
-  "#0b2e13",
-  "#14532d",
-  "#166534",
-  "#22c55e",
-  "#4ade80"
+// --- GENERATE PROCEDURAL SPRITES ---
+// To avoid loading external images, we pre-render assets onto hidden canvases.
+
+function createTileSprite(width, height, renderFn) {
+    const spriteCanvas = document.createElement('canvas');
+    spriteCanvas.width = width;
+    spriteCanvas.height = height;
+    const sCtx = spriteCanvas.getContext('2d');
+    renderFn(sCtx, width, height);
+    return spriteCanvas;
+}
+
+// 1. Ground Tile
+const groundTile = createTileSprite(32, 32, (c, w, h) => {
+    // Dirt base
+    c.fillStyle = DIRT_BASE;
+    c.fillRect(0, 0, w, h);
+    // Noise/Texture
+    c.fillStyle = DIRT_TOP;
+    c.fillRect(0, 0, w, 8);
+    c.fillRect(4, 12, 8, 4);
+    c.fillRect(16, 20, 12, 4);
+    // Grass top
+    c.fillStyle = GRASS_BASE;
+    c.fillRect(0, 0, w, 4);
+    c.fillStyle = GRASS_TOP;
+    c.fillRect(0, 0, w, 2);
+    // Pixel details
+    c.fillStyle = '#114b21';
+    c.fillRect(4, 2, 2, 2);
+    c.fillRect(18, 2, 4, 1);
+});
+
+// 2. Floating Platform Tile
+const platformTile = createTileSprite(48, 16, (c, w, h) => {
+    c.fillStyle = DIRT_BASE;
+    c.fillRect(4, 4, w - 8, h - 4);
+    c.fillStyle = DIRT_TOP;
+    c.fillRect(4, 4, w - 8, 4);
+    // Grass top
+    c.fillStyle = GRASS_TOP;
+    c.fillRect(2, 0, w - 4, 3);
+    c.fillStyle = GRASS_BASE;
+    c.fillRect(2, 3, w - 4, 1);
+    // Corner rounding steps
+    c.fillStyle = DIRT_BASE;
+    c.fillRect(2, 6, 2, 6);
+    c.fillRect(w - 4, 6, 2, 6);
+});
+
+// 3. Tree Sprite
+const treeSprite = createTileSprite(64, 80, (c, w, h) => {
+    // Trunk
+    c.fillStyle = TREE_TRUNK;
+    c.fillRect(28, 40, 8, 40);
+    c.fillRect(24, 70, 16, 10); // Roots
+    // Leaves (Dark background cluster)
+    c.fillStyle = TREE_LEAF_DARK;
+    c.beginPath();
+    c.arc(32, 30, 24, 0, Math.PI * 2);
+    c.fill();
+    // Leaves (Light foreground cluster)
+    c.fillStyle = TREE_LEAF_LIGHT;
+    c.beginPath();
+    c.arc(26, 24, 16, 0, Math.PI * 2);
+    c.arc(40, 26, 14, 0, Math.PI * 2);
+    c.arc(32, 16, 12, 0, Math.PI * 2);
+    c.fill();
+});
+
+// --- SCENE OBJECTS DESIGN ---
+const platforms = [
+    { x: 120, y: 150 },
+    { x: 250, y: 220 },
+    { x: 500, y: 160 }
 ];
 
-// fondo
-for (let x = 0; x < canvas.width; x += tile) {
-  for (let y = 0; y < canvas.height; y += tile) {
-    ctx.fillStyle = greens[Math.floor(Math.random() * 3)];
-    ctx.fillRect(x, y, tile, tile);
-  }
+const backgroundHills = [
+    { x: 50, y: 250, w: 120, h: 150 },
+    { x: 550, y: 200, w: 200, h: 200 }
+];
+
+const trees = [
+    { x: 80, y: 310 },
+    { x: 420, y: 310 },
+    { x: 680, y: 310 }
+];
+
+// --- MAIN LOOP ---
+function update() {
+    // Move background to the left
+    scrollOffset += scrollSpeed;
+    if (scrollOffset >= canvas.width) {
+        scrollOffset = 0;
+    }
 }
 
-// árboles grandes
-for (let i = 0; i < 20; i++) {
-  let x = Math.random() * canvas.width;
-  let height = 200 + Math.random() * 300;
+function draw() {
+    // 1. Clear with Blue Sky
+    ctx.fillStyle = SKY_COLOR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // tronco
-  ctx.fillStyle = "#3b2f2f";
-  ctx.fillRect(x, canvas.height - height, 20, height);
+    ctx.save();
+    // Shift camera to simulate movement
+    ctx.translate(-scrollOffset, 0);
 
-  // hojas
-  for (let j = 0; j < 100; j++) {
-    ctx.fillStyle = greens[Math.floor(Math.random() * greens.length)];
-    ctx.fillRect(
-      x - 50 + Math.random() * 100,
-      canvas.height - height + Math.random() * 150,
-      tile,
-      tile
-    );
-  }
+    // --- DRAW TWO SCREENS WIDTH FOR SEAMLESS LOOP ---
+    for (let loop = 0; loop < 2; loop++) {
+        const pageX = loop * canvas.width;
+
+        // 2. Draw Rocky Backdrops / Hills
+        ctx.fillStyle = '#895135';
+        backgroundHills.forEach(hill => {
+            ctx.fillRect(hill.x + pageX, hill.y, hill.w, hill.h);
+            // Cliff highlights
+            ctx.fillStyle = '#a06040';
+            ctx.fillRect(hill.x + pageX, hill.y, hill.w, 10);
+            ctx.fillStyle = '#6d3c23';
+            ctx.fillRect(hill.x + pageX, hill.y + 10, 8, hill.h - 10);
+        });
+
+        // 3. Draw Foliage / Trees
+        trees.forEach(tree => {
+            ctx.drawImage(treeSprite, tree.x + pageX, tree.y);
+        });
+
+        // 4. Draw Floating Platforms
+        platforms.forEach(plat => {
+            ctx.drawImage(platformTile, plat.x + pageX, plat.y);
+        });
+
+        // 5. Draw Ground Floor
+        const groundY = canvas.height - 64;
+        for (let x = 0; x < canvas.width; x += 32) {
+            ctx.drawImage(groundTile, x + pageX, groundY);
+            ctx.drawImage(groundTile, x + pageX, groundY + 32);
+        }
+    }
+
+    ctx.restore();
 }
+
+function tick() {
+    update();
+    draw();
+    requestAnimationFrame(tick);
+}
+
+// Start simulation
+tick();
 </script>
+
 </body>
 </html>
