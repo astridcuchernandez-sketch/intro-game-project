@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Procedural Pixel Art World - True Match Edition</title>
+    <title>Procedural Pixel Art World - Continuous Clouds</title>
     <style>
         body {
             margin: 0;
@@ -58,13 +58,10 @@ function createTileSprite(width, height, renderFn) {
 // 1. Solid Ground & Step Top Floor Tile
 const groundTile = createTileSprite(32, 32, (c, w, h) => {
     c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
-    // Heavy Dithering/Noise Texture
     c.fillStyle = DIRT_TOP; c.fillRect(2, 6, 4, 4); c.fillRect(16, 12, 6, 4); c.fillRect(8, 24, 4, 6);
     c.fillStyle = DIRT_DARK; c.fillRect(12, 4, 4, 4); c.fillRect(22, 20, 6, 6); c.fillRect(0, 16, 4, 4);
-    // Grass Caps with Hanging Blades/Roots
     c.fillStyle = GRASS_BASE; c.fillRect(0, 0, w, 8);
     c.fillStyle = GRASS_TOP; c.fillRect(0, 0, w, 4);
-    // Hanging grass blades details
     c.fillStyle = GRASS_BASE;
     c.fillRect(2, 8, 2, 4); c.fillRect(10, 8, 4, 2); c.fillRect(22, 8, 2, 5); c.fillRect(28, 8, 3, 2);
 });
@@ -72,7 +69,6 @@ const groundTile = createTileSprite(32, 32, (c, w, h) => {
 // 2. Vertical Cliff-Cut Wall Tile (For Pit Walls)
 const cliffWallTile = createTileSprite(32, 32, (c, w, h) => {
     c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
-    // Shadow shading detailing on vertical edges
     c.fillStyle = DIRT_DARK; c.fillRect(0, 0, 8, h); c.fillRect(14, 8, 6, 8);
     c.fillStyle = DIRT_TOP; c.fillRect(24, 4, 4, 6); c.fillRect(8, 20, 4, 4);
 });
@@ -89,10 +85,8 @@ const bushSprite = createTileSprite(48, 24, (c, w, h) => {
 
 // 4. Exact Image Proportions Tree Sprite
 const treeSprite = createTileSprite(64, 96, (c, w, h) => {
-    // Solid thick trunk
     c.fillStyle = TREE_TRUNK; c.fillRect(26, 48, 12, 48);
-    c.fillStyle = DIRT_DARK; c.fillRect(26, 48, 3, 48); // Trunk outline shadow
-    // Rounded leaf layers
+    c.fillStyle = DIRT_DARK; c.fillRect(26, 48, 3, 48);
     c.fillStyle = TREE_LEAF_SHADOW;
     c.beginPath(); c.arc(32, 32, 28, 0, Math.PI * 2); c.fill();
     c.fillStyle = TREE_LEAF_BASE;
@@ -113,10 +107,10 @@ const cloudSprite = createTileSprite(80, 32, (c, w, h) => {
 
 // 6. Character Mockup Placeholder Sprite
 const playerSprite = createTileSprite(24, 32, (c, w, h) => {
-    c.fillStyle = '#a0522d'; c.fillRect(4, 0, 16, 14); // Hair
-    c.fillStyle = '#ffdbac'; c.fillRect(6, 8, 12, 10); // Face
-    c.fillStyle = '#4682b4'; c.fillRect(4, 18, 16, 10); // Shirt
-    c.fillStyle = '#8b0000'; c.fillRect(6, 28, 4, 4); c.fillRect(14, 28, 4, 4); // Shoes
+    c.fillStyle = '#a0522d'; c.fillRect(4, 0, 16, 14);
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 8, 12, 10);
+    c.fillStyle = '#4682b4'; c.fillRect(4, 18, 16, 10);
+    c.fillStyle = '#8b0000'; c.fillRect(6, 28, 4, 4); c.fillRect(14, 28, 4, 4);
 });
 
 // --- SEEDED PSEUDO-RANDOM GENERATOR ---
@@ -131,35 +125,32 @@ const activeChunks = {};
 
 function generateChunk(chunkIndex) {
     const objects = { steps: [], clouds: [], trees: [], bushes: [], pits: [] };
-    let seed = chunkIndex * 415.26;
+    let seed = chunkIndex * 521.84;
 
-    // 1. Layout Segment Elevation and Pits (Matching Image Layout)
+    // 1. Layout Segment Elevation and Pits
     const segmentPattern = Math.floor(seededRandom(seed++) * 3); 
     
     if (segmentPattern === 0) {
-        // Straight plain floor with an abrupt gap
         objects.pits.push({ startTile: 6, widthTiles: 2 });
     } else if (segmentPattern === 1) {
-        // Raised plateau setup step (like the right-center portion of the user image)
         objects.steps.push({ startTile: 4, widthTiles: 5, heightY: 322 });
-        objects.bushes.push({ x: 6 * 32 }); // Bush sits cleanly on top of the step platform
+        objects.bushes.push({ x: 6 * 32 });
     } else {
-        // Deep step valley formation layout
         objects.steps.push({ startTile: 0, widthTiles: 3, heightY: 322 });
         objects.pits.push({ startTile: 3, widthTiles: 3 });
         objects.steps.push({ startTile: 6, widthTiles: 4, heightY: 354 });
     }
 
-    // Collect blocked locations to prevent overlapping decorations on gaps
     const blockedTiles = new Set();
     objects.pits.forEach(p => { for(let t=0; t<p.widthTiles; t++) blockedTiles.add(p.startTile + t); });
 
-    // 2. High Frequency Clouds Coating Entire Sky Horizon
-    const numClouds = 2 + Math.floor(seededRandom(seed++) * 2);
+    // 2. High Frequency Clouds Coating Entire Sky Horizon (6 to 9 per chunk for dense sky coverage)
+    const numClouds = 6 + Math.floor(seededRandom(seed++) * 4);
     for (let i = 0; i < numClouds; i++) {
         objects.clouds.push({
             x: seededRandom(seed++) * (CHUNK_WIDTH - 80),
-            y: 20 + (i * 35) + (seededRandom(seed++) * 15)
+            // Uniform structural distribution strips coat the sky background fully
+            y: 10 + (i * 24) + (seededRandom(seed++) * 12)
         });
     }
 
@@ -168,7 +159,6 @@ function generateChunk(chunkIndex) {
     for (let i = 0; i < numTrees; i++) {
         const targetTile = Math.floor(seededRandom(seed++) * 11);
         if (!blockedTiles.has(targetTile)) {
-            // Check if tree sits on ground or a raised custom step structure
             let treeY = 306;
             objects.steps.forEach(s => {
                 if (targetTile >= s.startTile && targetTile < s.startTile + s.widthTiles) {
@@ -196,7 +186,6 @@ function update() {
 }
 
 function draw() {
-    // Smooth Blue Sky Clearance Background
     ctx.fillStyle = SKY_COLOR;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -205,7 +194,8 @@ function draw() {
 
     // --- LAYER 1: SKY HORIZON CLOUDS (Parallax Slower Stretched Layer) ---
     ctx.save();
-    ctx.translate(-cameraX * 0.3, 0);
+    ctx.translate(-cameraX * 0.4, 0);
+    // Render buffer safely past bounds to eliminate screen edge popping
     for (let i = startChunk - 2; i <= endChunk + 2; i++) {
         if (!activeChunks[i]) activeChunks[i] = generateChunk(i);
         const chunkOffset = i * CHUNK_WIDTH;
@@ -228,27 +218,22 @@ function draw() {
         for (let t = 0; t < 13; t++) {
             const tileX = chunkOffset + (t * 32);
             
-            // Check for Pit Gaps
             let inPit = false;
             chunk.pits.forEach(p => {
                 if (t >= p.startTile && t < p.startTile + p.widthTiles) inPit = true;
             });
 
-            // Check for Custom Step Elevations
             let currentGroundY = defaultGroundY;
             chunk.steps.forEach(s => {
                 if (t >= s.startTile && t < s.startTile + s.widthTiles) currentGroundY = s.heightY;
             });
 
             if (!inPit) {
-                // Render Floor Surface
                 ctx.drawImage(groundTile, tileX, currentGroundY);
-                // Fill Underneath Base Soil Solid Blocks
                 ctx.fillStyle = DIRT_BODY;
                 ctx.fillRect(tileX, currentGroundY + 32, 32, canvas.height - currentGroundY - 32);
             } else {
-                // Pit void edge configurations (Exposes rocky cut cliffs on sides)
-                ctx.fillStyle = '#4c1e13'; // Void accent base backfill color
+                ctx.fillStyle = '#4c1e13';
                 ctx.fillRect(tileX, defaultGroundY, 32, canvas.height - defaultGroundY);
                 ctx.drawImage(cliffWallTile, tileX, defaultGroundY);
                 ctx.drawImage(cliffWallTile, tileX, defaultGroundY + 32);
@@ -261,7 +246,6 @@ function draw() {
         });
 
         chunk.bushes.forEach(bush => {
-            // Adjust bush layout height automatically based on if it falls onto step platforms
             let bushY = defaultGroundY - 14;
             chunk.steps.forEach(s => {
                 if ((bush.x/32) >= s.startTile && (bush.x/32) < s.startTile + s.widthTiles) bushY = s.heightY - 14;
@@ -270,8 +254,7 @@ function draw() {
         });
     }
 
-    // --- OPTIONAL: STATIC PLAYABLE CHARACTER MOCKUP OVERLAY ---
-    // Places the little character at a fixed position right beside the first edge pit gap
+    // --- STATIC PLAYABLE CHARACTER MOCKUP OVERLAY ---
     ctx.drawImage(playerSprite, cameraX + 160, 322);
 
     ctx.restore();
