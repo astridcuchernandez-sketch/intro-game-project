@@ -1,8 +1,8 @@
-<<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Pixel Art Platformer Background</title>
+    <title>Procedural Pixel Art World - Continuous Clouds</title>
     <style>
         body {
             margin: 0;
@@ -28,160 +28,241 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- COLORS (Procedural Pixel Art Palette) ---
-const SKY_COLOR = '#3caed6';
-const GRASS_TOP = '#1fc160';
-const GRASS_BASE = '#117b3d';
-const DIRT_TOP = '#aa6644';
-const DIRT_BASE = '#663322';
-const TREE_LEAF_LIGHT = '#2ecc71';
-const TREE_LEAF_DARK = '#27ae60';
-const TREE_TRUNK = '#5c3a21';
+// --- EXACT COLOR PALETTE MATCH ---
+const SKY_COLOR = '#7bc1fa';
+const GRASS_TOP = '#4dbb30';
+const GRASS_BASE = '#115b22';
+const DIRT_TOP = '#be532c';
+const DIRT_BODY = '#802f1a';
+const DIRT_DARK = '#431510';
+const TREE_LEAF_LIGHT = '#6ee139';
+const TREE_LEAF_BASE = '#3da324';
+const TREE_LEAF_SHADOW = '#236916';
+const TREE_TRUNK = '#954422';
+const CLOUD_BODY = '#ffffff';
+const CLOUD_SHADOW = '#9ed2fc';
 
-// --- GAME STATE ---
-let scrollOffset = 0;
-const scrollSpeed = 1;
+// --- CONTROLS ---
+let cameraX = 0;
+const scrollSpeed = 2;
 
-// --- GENERATE PROCEDURAL SPRITES ---
-// To avoid loading external images, we pre-render assets onto hidden canvases.
-
+// --- BITMAP CACHING (Procedural Texture Assets Matching Image Styling) ---
 function createTileSprite(width, height, renderFn) {
     const spriteCanvas = document.createElement('canvas');
     spriteCanvas.width = width;
     spriteCanvas.height = height;
-    const sCtx = spriteCanvas.getContext('2d');
-    renderFn(sCtx, width, height);
+    renderFn(spriteCanvas.getContext('2d'), width, height);
     return spriteCanvas;
 }
 
-// 1. Ground Tile
+// 1. Solid Ground & Step Top Floor Tile
 const groundTile = createTileSprite(32, 32, (c, w, h) => {
-    // Dirt base
-    c.fillStyle = DIRT_BASE;
-    c.fillRect(0, 0, w, h);
-    // Noise/Texture
-    c.fillStyle = DIRT_TOP;
-    c.fillRect(0, 0, w, 8);
-    c.fillRect(4, 12, 8, 4);
-    c.fillRect(16, 20, 12, 4);
-    // Grass top
+    c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
+    c.fillStyle = DIRT_TOP; c.fillRect(2, 6, 4, 4); c.fillRect(16, 12, 6, 4); c.fillRect(8, 24, 4, 6);
+    c.fillStyle = DIRT_DARK; c.fillRect(12, 4, 4, 4); c.fillRect(22, 20, 6, 6); c.fillRect(0, 16, 4, 4);
+    c.fillStyle = GRASS_BASE; c.fillRect(0, 0, w, 8);
+    c.fillStyle = GRASS_TOP; c.fillRect(0, 0, w, 4);
     c.fillStyle = GRASS_BASE;
-    c.fillRect(0, 0, w, 4);
-    c.fillStyle = GRASS_TOP;
-    c.fillRect(0, 0, w, 2);
-    // Pixel details
-    c.fillStyle = '#114b21';
-    c.fillRect(4, 2, 2, 2);
-    c.fillRect(18, 2, 4, 1);
+    c.fillRect(2, 8, 2, 4); c.fillRect(10, 8, 4, 2); c.fillRect(22, 8, 2, 5); c.fillRect(28, 8, 3, 2);
 });
 
-// 2. Floating Platform Tile
-const platformTile = createTileSprite(48, 16, (c, w, h) => {
-    c.fillStyle = DIRT_BASE;
-    c.fillRect(4, 4, w - 8, h - 4);
-    c.fillStyle = DIRT_TOP;
-    c.fillRect(4, 4, w - 8, 4);
-    // Grass top
-    c.fillStyle = GRASS_TOP;
-    c.fillRect(2, 0, w - 4, 3);
-    c.fillStyle = GRASS_BASE;
-    c.fillRect(2, 3, w - 4, 1);
-    // Corner rounding steps
-    c.fillStyle = DIRT_BASE;
-    c.fillRect(2, 6, 2, 6);
-    c.fillRect(w - 4, 6, 2, 6);
+// 2. Vertical Cliff-Cut Wall Tile (For Pit Walls)
+const cliffWallTile = createTileSprite(32, 32, (c, w, h) => {
+    c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
+    c.fillStyle = DIRT_DARK; c.fillRect(0, 0, 8, h); c.fillRect(14, 8, 6, 8);
+    c.fillStyle = DIRT_TOP; c.fillRect(24, 4, 4, 6); c.fillRect(8, 20, 4, 4);
 });
 
-// 3. Tree Sprite
-const treeSprite = createTileSprite(64, 80, (c, w, h) => {
-    // Trunk
-    c.fillStyle = TREE_TRUNK;
-    c.fillRect(28, 40, 8, 40);
-    c.fillRect(24, 70, 16, 10); // Roots
-    // Leaves (Dark background cluster)
-    c.fillStyle = TREE_LEAF_DARK;
-    c.beginPath();
-    c.arc(32, 30, 24, 0, Math.PI * 2);
-    c.fill();
-    // Leaves (Light foreground cluster)
+// 3. Compact Bush Sprite
+const bushSprite = createTileSprite(48, 24, (c, w, h) => {
+    c.fillStyle = TREE_LEAF_SHADOW;
+    c.beginPath(); c.arc(12, 16, 8, 0, Math.PI*2); c.arc(24, 14, 10, 0, Math.PI*2); c.arc(36, 16, 8, 0, Math.PI*2); c.fill();
+    c.fillStyle = TREE_LEAF_BASE;
+    c.beginPath(); c.arc(12, 13, 8, 0, Math.PI*2); c.arc(24, 10, 10, 0, Math.PI*2); c.arc(36, 13, 8, 0, Math.PI*2); c.fill();
     c.fillStyle = TREE_LEAF_LIGHT;
-    c.beginPath();
-    c.arc(26, 24, 16, 0, Math.PI * 2);
-    c.arc(40, 26, 14, 0, Math.PI * 2);
-    c.arc(32, 16, 12, 0, Math.PI * 2);
-    c.fill();
+    c.beginPath(); c.arc(10, 10, 5, 0, Math.PI*2); c.arc(22, 7, 7, 0, Math.PI*2); c.arc(34, 10, 5, 0, Math.PI*2); c.fill();
 });
 
-// --- SCENE OBJECTS DESIGN ---
-const platforms = [
-    { x: 120, y: 150 },
-    { x: 250, y: 220 },
-    { x: 500, y: 160 }
-];
+// 4. Exact Image Proportions Tree Sprite
+const treeSprite = createTileSprite(64, 96, (c, w, h) => {
+    c.fillStyle = TREE_TRUNK; c.fillRect(26, 48, 12, 48);
+    c.fillStyle = DIRT_DARK; c.fillRect(26, 48, 3, 48);
+    c.fillStyle = TREE_LEAF_SHADOW;
+    c.beginPath(); c.arc(32, 32, 28, 0, Math.PI * 2); c.fill();
+    c.fillStyle = TREE_LEAF_BASE;
+    c.beginPath(); c.arc(32, 28, 26, 0, Math.PI * 2); c.fill();
+    c.fillStyle = TREE_LEAF_LIGHT;
+    c.beginPath(); c.arc(24, 20, 16, 0, Math.PI * 2); c.arc(40, 22, 14, 0, Math.PI * 2); c.fill();
+});
 
-const backgroundHills = [
-    { x: 50, y: 250, w: 120, h: 150 },
-    { x: 550, y: 200, w: 200, h: 200 }
-];
+// 5. Accurate Flat-Bottomed Floating Sky Clouds
+const cloudSprite = createTileSprite(80, 32, (c, w, h) => {
+    c.fillStyle = CLOUD_SHADOW;
+    c.beginPath(); c.arc(20, 20, 12, 0, Math.PI * 2); c.arc(40, 16, 16, 0, Math.PI * 2); c.arc(60, 20, 12, 0, Math.PI * 2); c.fill();
+    c.fillRect(8, 20, 64, 12);
+    c.fillStyle = CLOUD_BODY;
+    c.beginPath(); c.arc(20, 16, 12, 0, Math.PI * 2); c.arc(40, 12, 16, 0, Math.PI * 2); c.arc(60, 16, 12, 0, Math.PI * 2); c.fill();
+    c.fillRect(8, 16, 64, 12);
+});
 
-const trees = [
-    { x: 80, y: 310 },
-    { x: 420, y: 310 },
-    { x: 680, y: 310 }
-];
+// 6. Character Mockup Placeholder Sprite
+const playerSprite = createTileSprite(24, 32, (c, w, h) => {
+    c.fillStyle = '#a0522d'; c.fillRect(4, 0, 16, 14);
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 8, 12, 10);
+    c.fillStyle = '#4682b4'; c.fillRect(4, 18, 16, 10);
+    c.fillStyle = '#8b0000'; c.fillRect(6, 28, 4, 4); c.fillRect(14, 28, 4, 4);
+});
 
-// --- MAIN LOOP ---
-function update() {
-    // Move background to the left
-    scrollOffset += scrollSpeed;
-    if (scrollOffset >= canvas.width) {
-        scrollOffset = 0;
-    }
+// --- SEEDED PSEUDO-RANDOM GENERATOR ---
+function seededRandom(seed) {
+    const x = Math.sin(seed++) * 10000;
+    return x - Math.floor(x);
 }
 
-function draw() {
-    // 1. Clear with Blue Sky
-    ctx.fillStyle = SKY_COLOR;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+// --- CHUNK GENERATION ENGINE ---
+const CHUNK_WIDTH = 416; // 13 Tiles per unit segment width
+const activeChunks = {};
 
-    ctx.save();
-    // Shift camera to simulate movement
-    ctx.translate(-scrollOffset, 0);
+function generateChunk(chunkIndex) {
+    const objects = { steps: [], clouds: [], trees: [], bushes: [], pits: [] };
+    let seed = chunkIndex * 521.84;
 
-    // --- DRAW TWO SCREENS WIDTH FOR SEAMLESS LOOP ---
-    for (let loop = 0; loop < 2; loop++) {
-        const pageX = loop * canvas.width;
+    // 1. Layout Segment Elevation and Pits
+    const segmentPattern = Math.floor(seededRandom(seed++) * 3); 
+    
+    if (segmentPattern === 0) {
+        objects.pits.push({ startTile: 6, widthTiles: 2 });
+    } else if (segmentPattern === 1) {
+        objects.steps.push({ startTile: 4, widthTiles: 5, heightY: 322 });
+        objects.bushes.push({ x: 6 * 32 });
+    } else {
+        objects.steps.push({ startTile: 0, widthTiles: 3, heightY: 322 });
+        objects.pits.push({ startTile: 3, widthTiles: 3 });
+        objects.steps.push({ startTile: 6, widthTiles: 4, heightY: 354 });
+    }
 
-        // 2. Draw Rocky Backdrops / Hills
-        ctx.fillStyle = '#895135';
-        backgroundHills.forEach(hill => {
-            ctx.fillRect(hill.x + pageX, hill.y, hill.w, hill.h);
-            // Cliff highlights
-            ctx.fillStyle = '#a06040';
-            ctx.fillRect(hill.x + pageX, hill.y, hill.w, 10);
-            ctx.fillStyle = '#6d3c23';
-            ctx.fillRect(hill.x + pageX, hill.y + 10, 8, hill.h - 10);
+    const blockedTiles = new Set();
+    objects.pits.forEach(p => { for(let t=0; t<p.widthTiles; t++) blockedTiles.add(p.startTile + t); });
+
+    // 2. High Frequency Clouds Coating Entire Sky Horizon (6 to 9 per chunk for dense sky coverage)
+    const numClouds = 6 + Math.floor(seededRandom(seed++) * 4);
+    for (let i = 0; i < numClouds; i++) {
+        objects.clouds.push({
+            x: seededRandom(seed++) * (CHUNK_WIDTH - 80),
+            // Uniform structural distribution strips coat the sky background fully
+            y: 10 + (i * 24) + (seededRandom(seed++) * 12)
         });
+    }
 
-        // 3. Draw Foliage / Trees
-        trees.forEach(tree => {
-            ctx.drawImage(treeSprite, tree.x + pageX, tree.y);
-        });
-
-        // 4. Draw Floating Platforms
-        platforms.forEach(plat => {
-            ctx.drawImage(platformTile, plat.x + pageX, plat.y);
-        });
-
-        // 5. Draw Ground Floor
-        const groundY = canvas.height - 64;
-        for (let x = 0; x < canvas.width; x += 32) {
-            ctx.drawImage(groundTile, x + pageX, groundY);
-            ctx.drawImage(groundTile, x + pageX, groundY + 32);
+    // 3. Precision Placed Cliff Edge Trees
+    const numTrees = 1 + Math.floor(seededRandom(seed++) * 2);
+    for (let i = 0; i < numTrees; i++) {
+        const targetTile = Math.floor(seededRandom(seed++) * 11);
+        if (!blockedTiles.has(targetTile)) {
+            let treeY = 306;
+            objects.steps.forEach(s => {
+                if (targetTile >= s.startTile && targetTile < s.startTile + s.widthTiles) {
+                    treeY = s.heightY - 80;
+                }
+            });
+            objects.trees.push({ x: targetTile * 32, y: treeY });
         }
     }
 
+    // 4. Ground Bushes
+    if (seededRandom(seed++) > 0.4) {
+        const targetTile = Math.floor(seededRandom(seed++) * 10);
+        if (!blockedTiles.has(targetTile) && !blockedTiles.has(targetTile + 1)) {
+            objects.bushes.push({ x: targetTile * 32 });
+        }
+    }
+
+    return objects;
+}
+
+// --- RENDERING PIPELINE ---
+function update() {
+    cameraX += scrollSpeed;
+}
+
+function draw() {
+    ctx.fillStyle = SKY_COLOR;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const startChunk = Math.floor(cameraX / CHUNK_WIDTH);
+    const endChunk = Math.floor((cameraX + canvas.width) / CHUNK_WIDTH);
+
+    // --- LAYER 1: SKY HORIZON CLOUDS (Parallax Slower Stretched Layer) ---
+    ctx.save();
+    ctx.translate(-cameraX * 0.4, 0);
+    // Render buffer safely past bounds to eliminate screen edge popping
+    for (let i = startChunk - 2; i <= endChunk + 2; i++) {
+        if (!activeChunks[i]) activeChunks[i] = generateChunk(i);
+        const chunkOffset = i * CHUNK_WIDTH;
+        activeChunks[i].clouds.forEach(cloud => {
+            ctx.drawImage(cloudSprite, chunkOffset + cloud.x, cloud.y);
+        });
+    }
     ctx.restore();
+
+    // --- LAYER 2: INTERACTIVE GROUND CHUNKS ---
+    ctx.save();
+    ctx.translate(-cameraX, 0);
+
+    for (let i = startChunk; i <= endChunk; i++) {
+        const chunkOffset = i * CHUNK_WIDTH;
+        const chunk = activeChunks[i];
+        const defaultGroundY = 354; 
+
+        // Draw Ground Tiles & Steps with Precision Gaps
+        for (let t = 0; t < 13; t++) {
+            const tileX = chunkOffset + (t * 32);
+            
+            let inPit = false;
+            chunk.pits.forEach(p => {
+                if (t >= p.startTile && t < p.startTile + p.widthTiles) inPit = true;
+            });
+
+            let currentGroundY = defaultGroundY;
+            chunk.steps.forEach(s => {
+                if (t >= s.startTile && t < s.startTile + s.widthTiles) currentGroundY = s.heightY;
+            });
+
+            if (!inPit) {
+                ctx.drawImage(groundTile, tileX, currentGroundY);
+                ctx.fillStyle = DIRT_BODY;
+                ctx.fillRect(tileX, currentGroundY + 32, 32, canvas.height - currentGroundY - 32);
+            } else {
+                ctx.fillStyle = '#4c1e13';
+                ctx.fillRect(tileX, defaultGroundY, 32, canvas.height - defaultGroundY);
+                ctx.drawImage(cliffWallTile, tileX, defaultGroundY);
+                ctx.drawImage(cliffWallTile, tileX, defaultGroundY + 32);
+            }
+        }
+
+        // Draw Foliage Assets On Core Surfaces
+        chunk.trees.forEach(tree => {
+            ctx.drawImage(treeSprite, chunkOffset + tree.x, tree.y);
+        });
+
+        chunk.bushes.forEach(bush => {
+            let bushY = defaultGroundY - 14;
+            chunk.steps.forEach(s => {
+                if ((bush.x/32) >= s.startTile && (bush.x/32) < s.startTile + s.widthTiles) bushY = s.heightY - 14;
+            });
+            ctx.drawImage(bushSprite, chunkOffset + bush.x, bushY);
+        });
+    }
+
+    // --- STATIC PLAYABLE CHARACTER MOCKUP OVERLAY ---
+    ctx.drawImage(playerSprite, cameraX + 160, 322);
+
+    ctx.restore();
+
+    // Cache cleanup routines
+    for (const key in activeChunks) {
+        if (key < startChunk - 4) delete activeChunks[key];
+    }
 }
 
 function tick() {
@@ -190,7 +271,6 @@ function tick() {
     requestAnimationFrame(tick);
 }
 
-// Start simulation
 tick();
 </script>
 
