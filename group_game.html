@@ -13,6 +13,7 @@
             align-items: center;
             height: 100vh;
             overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
         }
         canvas {
             image-rendering: pixelated;
@@ -28,8 +29,9 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-// --- EXACT COLOR PALETTE MATCH ---
+// --- COLOR PALETTES MATCH ---
 const SKY_COLOR = '#7bc1fa';
+const SKY_SAD = '#4a5568'; // Dark gray overcast sky
 const GRASS_TOP = '#4dbb30';
 const GRASS_BASE = '#115b22';
 const DIRT_TOP = '#be532c';
@@ -42,11 +44,77 @@ const TREE_TRUNK = '#954422';
 const CLOUD_BODY = '#ffffff';
 const CLOUD_SHADOW = '#9ed2fc';
 
-// --- CONTROLS ---
+// --- CONTROLS & CAMERA ---
 let cameraX = 0;
 const scrollSpeed = 2;
+let gameOver = false; 
+let globalTime = 0;   
 
-// --- BITMAP CACHING (Procedural Texture Assets Matching Image Styling) ---
+// --- TWO-STAGE DIALOGUE SYSTEM STATE ---
+let inCutscene = true;
+let dialogueIndex = 0;
+const dialogueLines = [
+    // Act 1: The Sad Farewell
+    { speaker: "MOTHER", text: "Please stay safe out there, my boy... return to us when this terrible war is over.", act: 1 },
+    { speaker: "BROTHER", text: "Make our family proud big bro! Fight hard and come back home safe!", act: 1 },
+    { speaker: "PLAYER", text: "I will defend our homeland with everything I've got. Goodbye, family!", act: 1 },
+    // Act 2: The Bootcamp Training Area
+    { speaker: "DRILL SERGEANT", text: "Listen up, recruit! Before you hit the frontlines, you must clear this obstacle field!", act: 2 },
+    { speaker: "DRILL SERGEANT", text: "Utilize these high floating beams and springboard platforms to bypass the trenches!", act: 2 },
+    { speaker: "PLAYER", text: "Sir, yes sir! Watch me master this course! Move out!", act: 2 }
+];
+
+// --- PLAYER PHYSICS & JUMP SYSTEM ---
+const player = {
+    x: 180,
+    y: 322, 
+    width: 24,
+    height: 32,
+    velocityY: 0,
+    gravity: 0.6,
+    jumpForce: -12,
+    bounceForce: -18, 
+    isGrounded: true 
+};
+
+function resetGame() {
+    cameraX = 0;
+    player.x = 180;
+    player.y = 322; 
+    player.velocityY = 0;
+    player.isGrounded = true;
+    gameOver = false;
+    inCutscene = true;
+    dialogueIndex = 0;
+}
+
+window.addEventListener('keydown', (e) => {
+    if (gameOver) {
+        resetGame();
+        return;
+    }
+    if (e.code === 'Space') {
+        if (inCutscene) {
+            dialogueIndex++;
+            if (dialogueIndex >= dialogueLines.length) {
+                inCutscene = false; 
+            }
+        } else if (player.isGrounded) {
+            player.velocityY = player.jumpForce;
+            player.isGrounded = false;
+        }
+    }
+});
+
+canvas.addEventListener('click', () => {
+    if (gameOver) resetGame();
+    else if (inCutscene) {
+        dialogueIndex++;
+        if (dialogueIndex >= dialogueLines.length) inCutscene = false;
+    }
+});
+
+// --- BITMAP CACHING ---
 function createTileSprite(width, height, renderFn) {
     const spriteCanvas = document.createElement('canvas');
     spriteCanvas.width = width;
@@ -55,7 +123,6 @@ function createTileSprite(width, height, renderFn) {
     return spriteCanvas;
 }
 
-// 1. Solid Ground & Step Top Floor Tile
 const groundTile = createTileSprite(32, 32, (c, w, h) => {
     c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
     c.fillStyle = DIRT_TOP; c.fillRect(2, 6, 4, 4); c.fillRect(16, 12, 6, 4); c.fillRect(8, 24, 4, 6);
@@ -66,14 +133,12 @@ const groundTile = createTileSprite(32, 32, (c, w, h) => {
     c.fillRect(2, 8, 2, 4); c.fillRect(10, 8, 4, 2); c.fillRect(22, 8, 2, 5); c.fillRect(28, 8, 3, 2);
 });
 
-// 2. Vertical Cliff-Cut Wall Tile (For Pit Walls)
 const cliffWallTile = createTileSprite(32, 32, (c, w, h) => {
     c.fillStyle = DIRT_BODY; c.fillRect(0, 0, w, h);
     c.fillStyle = DIRT_DARK; c.fillRect(0, 0, 8, h); c.fillRect(14, 8, 6, 8);
     c.fillStyle = DIRT_TOP; c.fillRect(24, 4, 4, 6); c.fillRect(8, 20, 4, 4);
 });
 
-// 3. Compact Bush Sprite
 const bushSprite = createTileSprite(48, 24, (c, w, h) => {
     c.fillStyle = TREE_LEAF_SHADOW;
     c.beginPath(); c.arc(12, 16, 8, 0, Math.PI*2); c.arc(24, 14, 10, 0, Math.PI*2); c.arc(36, 16, 8, 0, Math.PI*2); c.fill();
@@ -83,7 +148,6 @@ const bushSprite = createTileSprite(48, 24, (c, w, h) => {
     c.beginPath(); c.arc(10, 10, 5, 0, Math.PI*2); c.arc(22, 7, 7, 0, Math.PI*2); c.arc(34, 10, 5, 0, Math.PI*2); c.fill();
 });
 
-// 4. Exact Image Proportions Tree Sprite
 const treeSprite = createTileSprite(64, 96, (c, w, h) => {
     c.fillStyle = TREE_TRUNK; c.fillRect(26, 48, 12, 48);
     c.fillStyle = DIRT_DARK; c.fillRect(26, 48, 3, 48);
@@ -95,7 +159,6 @@ const treeSprite = createTileSprite(64, 96, (c, w, h) => {
     c.beginPath(); c.arc(24, 20, 16, 0, Math.PI * 2); c.arc(40, 22, 14, 0, Math.PI * 2); c.fill();
 });
 
-// 5. Accurate Flat-Bottomed Floating Sky Clouds
 const cloudSprite = createTileSprite(80, 32, (c, w, h) => {
     c.fillStyle = CLOUD_SHADOW;
     c.beginPath(); c.arc(20, 20, 12, 0, Math.PI * 2); c.arc(40, 16, 16, 0, Math.PI * 2); c.arc(60, 20, 12, 0, Math.PI * 2); c.fill();
@@ -105,173 +168,393 @@ const cloudSprite = createTileSprite(80, 32, (c, w, h) => {
     c.fillRect(8, 16, 64, 12);
 });
 
-// 6. Character Mockup Placeholder Sprite
+// --- CHARACTER SPRITES ---
 const playerSprite = createTileSprite(24, 32, (c, w, h) => {
-    c.fillStyle = '#a0522d'; c.fillRect(4, 0, 16, 14);
-    c.fillStyle = '#ffdbac'; c.fillRect(6, 8, 12, 10);
-    c.fillStyle = '#4682b4'; c.fillRect(4, 18, 16, 10);
-    c.fillStyle = '#8b0000'; c.fillRect(6, 28, 4, 4); c.fillRect(14, 28, 4, 4);
+    c.fillStyle = '#4b5320'; c.fillRect(4, 0, 16, 12); // Helmet
+    c.fillStyle = '#3b4218'; c.fillRect(4, 10, 16, 2); 
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 12, 12, 6);  // Face
+    c.fillStyle = '#556b2f'; c.fillRect(4, 18, 16, 10); // Camo uniform
+    c.fillStyle = '#2e8b57'; c.fillRect(6, 20, 4, 4); c.fillRect(12, 24, 4, 3); 
+    c.fillStyle = '#1a1a1a'; c.fillRect(5, 28, 5, 4); c.fillRect(14, 28, 5, 4); // Boots
 });
 
-// --- SEEDED PSEUDO-RANDOM GENERATOR ---
+const motherSprite = createTileSprite(24, 34, (c, w, h) => {
+    c.fillStyle = '#4a2c5a'; c.fillRect(2, 0, 20, 14); 
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 6, 12, 10);  
+    c.fillStyle = '#d81b60'; c.fillRect(2, 16, 20, 14); 
+    c.fillStyle = '#333333'; c.fillRect(6, 30, 4, 4); c.fillRect(14, 30, 4, 4); 
+});
+
+const brotherSprite = createTileSprite(20, 24, (c, w, h) => {
+    c.fillStyle = '#f4d03f'; c.fillRect(2, 0, 16, 10); 
+    c.fillStyle = '#ffdbac'; c.fillRect(4, 4, 12, 8);   
+    c.fillStyle = '#27ae60'; c.fillRect(2, 12, 16, 10); 
+    c.fillStyle = '#8b0000'; c.fillRect(4, 22, 3, 2); c.fillRect(13, 22, 3, 2); 
+});
+
+const sergeantSprite = createTileSprite(24, 34, (c, w, h) => {
+    c.fillStyle = '#5c4033'; c.fillRect(2, 0, 20, 10); // Campaign Hat
+    c.fillRect(0, 8, 24, 3);
+    c.fillStyle = '#ffdbac'; c.fillRect(6, 11, 12, 6);   // Face
+    c.fillStyle = '#7f8c8d'; c.fillRect(4, 17, 16, 13); // Instructor Gray Coat
+    c.fillStyle = '#1a1a1a'; c.fillRect(5, 30, 4, 4); c.fillRect(14, 30, 4, 4);
+});
+
+// --- ENVIRONMENT OBJECT SPRITES ---
+const houseSprite = createTileSprite(140, 120, (c, w, h) => {
+    c.fillStyle = DIRT_BODY; c.fillRect(110, 10, 16, 30);
+    c.fillStyle = DIRT_DARK; c.fillRect(110, 10, 16, 4);
+    c.fillStyle = '#b68a3e'; c.beginPath(); c.moveTo(70, 15); c.lineTo(5, 55); c.lineTo(135, 55); c.closePath(); c.fill();
+    c.fillStyle = '#946f31'; c.fillRect(5, 52, 130, 4);
+    c.fillStyle = '#eae2ca'; c.fillRect(20, 55, 100, 65);
+    c.fillStyle = TREE_TRUNK; c.fillRect(20, 55, 6, 65); c.fillRect(114, 55, 6, 65);
+    c.fillStyle = DIRT_BODY; c.fillRect(35, 80, 22, 40);
+    c.fillStyle = '#2a3a4a'; c.fillRect(80, 75, 24, 24);
+});
+
+// Bootcamp Scaffold Decoration
+const campTowerSprite = createTileSprite(120, 160, (c, w, h) => {
+    c.fillStyle = '#7f8c8d'; 
+    c.fillRect(10, 0, 8, 160); c.fillRect(102, 0, 8, 160); // Girders
+    c.fillRect(10, 40, 100, 6); c.fillRect(10, 90, 100, 6); // Cross-beams
+    c.strokeStyle = '#555'; c.lineWidth = 3;
+    c.beginPath(); c.moveTo(18, 46); c.lineTo(102, 90); c.moveTo(102, 46); c.lineTo(18, 90); c.stroke();
+    c.fillStyle = '#e74c3c'; c.fillRect(35, 10, 50, 12); // Banner Sign
+});
+
+const platformSprite = createTileSprite(64, 16, (c, w, h) => {
+    c.fillStyle = '#555'; c.fillRect(0, 0, w, h);
+    c.fillStyle = '#7f8c8d'; c.fillRect(0, 0, w, 4);
+    c.fillStyle = '#333'; c.fillRect(0, h-4, w, 4);
+});
+
+const trampSprite = createTileSprite(32, 16, (c, w, h) => {
+    c.fillStyle = DIRT_DARK; c.fillRect(2, 10, 4, 6); c.fillRect(26, 10, 4, 6); 
+    c.fillStyle = '#ff003c'; c.fillRect(0, 2, w, 8); 
+    c.fillStyle = '#333333'; c.fillRect(0, 0, w, 4); 
+});
+
 function seededRandom(seed) {
     const x = Math.sin(seed++) * 10000;
     return x - Math.floor(x);
 }
 
 // --- CHUNK GENERATION ENGINE ---
-const CHUNK_WIDTH = 416; // 13 Tiles per unit segment width
+const CHUNK_WIDTH = 416; 
 const activeChunks = {};
 
 function generateChunk(chunkIndex) {
-    const objects = { steps: [], clouds: [], trees: [], bushes: [], pits: [] };
+    const objects = { steps: [], clouds: [], trees: [], bushes: [], pits: [], platforms: [], tramps: [] };
     let seed = chunkIndex * 521.84;
 
-    // 1. Layout Segment Elevation and Pits
-    const segmentPattern = Math.floor(seededRandom(seed++) * 3); 
-    
-    if (segmentPattern === 0) {
-        objects.pits.push({ startTile: 6, widthTiles: 2 });
-    } else if (segmentPattern === 1) {
-        objects.steps.push({ startTile: 4, widthTiles: 5, heightY: 322 });
-        objects.bushes.push({ x: 6 * 32 });
+    if (chunkIndex === 0) {
+        // Safe spawn base segment
     } else {
-        objects.steps.push({ startTile: 0, widthTiles: 3, heightY: 322 });
-        objects.pits.push({ startTile: 3, widthTiles: 3 });
-        objects.steps.push({ startTile: 6, widthTiles: 4, heightY: 354 });
+        const segmentPattern = Math.floor(seededRandom(seed++) * 3); 
+        if (segmentPattern === 0) {
+            objects.pits.push({ startTile: 5, widthTiles: 4 });
+            objects.platforms.push({ localStartX: 2 * 32, rangeX: 64, y: 270, width: 64, height: 16, speed: 1.2 });
+            objects.platforms.push({ localStartX: 6 * 32, rangeX: 80, y: 190, width: 64, height: 16, speed: 1.8 });
+            objects.tramps.push({ x: 2 * 32, y: 338, width: 32, height: 16, animTime: 0 });
+        } else if (segmentPattern === 1) {
+            objects.steps.push({ startTile: 4, widthTiles: 5, heightY: 322 });
+            objects.bushes.push({ x: 6 * 32 });
+            objects.platforms.push({ localStartX: 0, rangeX: 96, y: 220, width: 64, height: 16, speed: 2.2 });
+            objects.tramps.push({ x: 6 * 32, y: 306, width: 32, height: 16, animTime: 0 });
+        } else {
+            objects.steps.push({ startTile: 0, widthTiles: 3, heightY: 322 });
+            objects.pits.push({ startTile: 3, widthTiles: 4 });
+            objects.steps.push({ startTile: 7, widthTiles: 6, heightY: 354 });
+            objects.platforms.push({ localStartX: 2 * 32, rangeX: 100, y: 230, width: 64, height: 16, speed: 2.0 });
+            objects.platforms.push({ localStartX: 5 * 32, rangeX: 120, y: 150, width: 64, height: 16, speed: 1.5 });
+        }
     }
 
-    const blockedTiles = new Set();
-    objects.pits.forEach(p => { for(let t=0; t<p.widthTiles; t++) blockedTiles.add(p.startTile + t); });
-
-    // 2. High Frequency Clouds Coating Entire Sky Horizon (6 to 9 per chunk for dense sky coverage)
     const numClouds = 6 + Math.floor(seededRandom(seed++) * 4);
     for (let i = 0; i < numClouds; i++) {
         objects.clouds.push({
             x: seededRandom(seed++) * (CHUNK_WIDTH - 80),
-            // Uniform structural distribution strips coat the sky background fully
             y: 10 + (i * 24) + (seededRandom(seed++) * 12)
         });
     }
 
-    // 3. Precision Placed Cliff Edge Trees
     const numTrees = 1 + Math.floor(seededRandom(seed++) * 2);
     for (let i = 0; i < numTrees; i++) {
         const targetTile = Math.floor(seededRandom(seed++) * 11);
-        if (!blockedTiles.has(targetTile)) {
-            let treeY = 306;
-            objects.steps.forEach(s => {
-                if (targetTile >= s.startTile && targetTile < s.startTile + s.widthTiles) {
-                    treeY = s.heightY - 80;
-                }
-            });
-            objects.trees.push({ x: targetTile * 32, y: treeY });
-        }
-    }
+        let treeY = 354 - 96; 
 
-    // 4. Ground Bushes
-    if (seededRandom(seed++) > 0.4) {
-        const targetTile = Math.floor(seededRandom(seed++) * 10);
-        if (!blockedTiles.has(targetTile) && !blockedTiles.has(targetTile + 1)) {
-            objects.bushes.push({ x: targetTile * 32 });
+        objects.steps.forEach(s => {
+            if (targetTile >= s.startTile && targetTile < s.startTile + s.widthTiles) treeY = s.heightY - 96;
+        });
+
+        if (objects.platforms.length > 0 && seededRandom(seed++) > 0.5) {
+            let chosenPlat = objects.platforms[Math.floor(seededRandom(seed++) * objects.platforms.length)];
+            objects.trees.push({ isPlatformBound: true, platRef: chosenPlat, localXOffset: 8, y: 0 });
+        } else {
+            let inPit = false;
+            objects.pits.forEach(p => {
+                if (targetTile >= p.startTile && targetTile < p.startTile + p.widthTiles) inPit = true;
+            });
+            if (!inPit) objects.trees.push({ isPlatformBound: false, x: targetTile * 32, y: treeY });
         }
     }
 
     return objects;
 }
 
-// --- RENDERING PIPELINE ---
-function update() {
-    cameraX += scrollSpeed;
+function getGroundHeightAt(worldX) {
+    const chunkIndex = Math.floor(worldX / CHUNK_WIDTH);
+    let localX = worldX % CHUNK_WIDTH;
+    if (localX < 0) localX += CHUNK_WIDTH;
+    const tileIndex = Math.floor(localX / 32);
+    
+    if (!activeChunks[chunkIndex]) activeChunks[chunkIndex] = generateChunk(chunkIndex);
+    const chunk = activeChunks[chunkIndex];
+    
+    for (let p of chunk.pits) {
+        if (tileIndex >= p.startTile && tileIndex < p.startTile + p.widthTiles) return 9999;
+    }
+    for (let s of chunk.steps) {
+        if (tileIndex >= s.startTile && tileIndex < s.startTile + s.widthTiles) return s.heightY;
+    }
+    return 354; 
 }
 
+// --- GAME UPDATE LOGIC ---
+function update() {
+    if (gameOver || inCutscene) return; 
+
+    globalTime++;
+    cameraX += scrollSpeed;
+    player.x += scrollSpeed; 
+
+    player.velocityY += player.gravity;
+    player.y += player.velocityY;
+
+    const staticGroundY = getGroundHeightAt(player.x + player.width / 2);
+    let targetLandY = staticGroundY - player.height;
+    let standingOnPlatform = false;
+    let platformXSpeed = 0;
+
+    const currentChunkIdx = Math.floor(player.x / CHUNK_WIDTH);
+    for (let cOffset = -1; cOffset <= 1; cOffset++) {
+        const cIdx = currentChunkIdx + cOffset;
+        if (!activeChunks[cIdx]) activeChunks[cIdx] = generateChunk(cIdx);
+        
+        const chunkWorldX = cIdx * CHUNK_WIDTH;
+        const chunk = activeChunks[cIdx];
+
+        chunk.platforms.forEach(plat => {
+            const timeOffset = Math.sin(globalTime * 0.02 * plat.speed) * (plat.rangeX / 2);
+            const platX = chunkWorldX + plat.localStartX + (plat.rangeX / 2) + timeOffset;
+            const platY = plat.y;
+
+            const nextTimeOffset = Math.sin((globalTime + 1) * 0.02 * plat.speed) * (plat.rangeX / 2);
+            const nextPlatX = chunkWorldX + plat.localStartX + (plat.rangeX / 2) + nextTimeOffset;
+            
+            plat.currentGlobalX = platX;
+
+            if (player.x + player.width > platX && player.x < platX + plat.width) {
+                if (player.y + player.height >= platY && player.y + player.height - player.velocityY <= platY + 8) {
+                    if (player.velocityY >= 0) {
+                        targetLandY = platY - player.height;
+                        standingOnPlatform = true;
+                        platformXSpeed = nextPlatX - platX;
+                    }
+                }
+            }
+        });
+
+        chunk.tramps.forEach(tramp => {
+            const trampX = chunkWorldX + tramp.x;
+            if (tramp.animTime > 0) tramp.animTime--;
+
+            if (player.x + player.width > trampX && player.x < trampX + tramp.width) {
+                if (player.y + player.height >= tramp.y && player.y + player.height - player.velocityY <= tramp.y + 12) {
+                    if (player.velocityY > 0) { 
+                        player.y = tramp.y - player.height;
+                        player.velocityY = player.bounceForce;
+                        player.isGrounded = false;
+                        tramp.animTime = 10; 
+                    }
+                }
+            }
+        });
+    }
+
+    if (standingOnPlatform) player.x += platformXSpeed;
+
+    if (player.y >= targetLandY) {
+        player.y = targetLandY;
+        player.velocityY = 0;
+        player.isGrounded = true;
+    } else {
+        player.isGrounded = false;
+    }
+
+    if (player.y > canvas.height) gameOver = true;
+}
+
+// --- RENDER DRAW LOOP ---
 function draw() {
-    ctx.fillStyle = SKY_COLOR;
+    // Determine dynamic background atmosphere based on active line narrative focus
+    let activeColor = SKY_COLOR;
+    let activeAct = 2; // Default running state is bootcamp profile
+    
+    if (inCutscene) {
+        activeAct = dialogueLines[dialogueIndex].act;
+        activeColor = (activeAct === 1) ? SKY_SAD : SKY_COLOR;
+    }
+
+    ctx.fillStyle = activeColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const startChunk = Math.floor(cameraX / CHUNK_WIDTH);
-    const endChunk = Math.floor((cameraX + canvas.width) / CHUNK_WIDTH);
+    const endChunk = Math.floor((cameraX + canvas.width) / CHUNK_WIDTH) + 1;
 
-    // --- LAYER 1: SKY HORIZON CLOUDS (Parallax Slower Stretched Layer) ---
-    ctx.save();
-    ctx.translate(-cameraX * 0.4, 0);
-    // Render buffer safely past bounds to eliminate screen edge popping
-    for (let i = startChunk - 2; i <= endChunk + 2; i++) {
-        if (!activeChunks[i]) activeChunks[i] = generateChunk(i);
-        const chunkOffset = i * CHUNK_WIDTH;
-        activeChunks[i].clouds.forEach(cloud => {
-            ctx.drawImage(cloudSprite, chunkOffset + cloud.x, cloud.y);
-        });
-    }
-    ctx.restore();
-
-    // --- LAYER 2: INTERACTIVE GROUND CHUNKS ---
     ctx.save();
     ctx.translate(-cameraX, 0);
 
-    for (let i = startChunk; i <= endChunk; i++) {
-        const chunkOffset = i * CHUNK_WIDTH;
-        const chunk = activeChunks[i];
-        const defaultGroundY = 354; 
+    for (let c = startChunk; c <= endChunk; c++) {
+        if (!activeChunks[c]) activeChunks[c] = generateChunk(c);
+        const chunk = activeChunks[c];
+        const chunkWorldX = c * CHUNK_WIDTH;
 
-        // Draw Ground Tiles & Steps with Precision Gaps
-        for (let t = 0; t < 13; t++) {
-            const tileX = chunkOffset + (t * 32);
-            
-            let inPit = false;
-            chunk.pits.forEach(p => {
-                if (t >= p.startTile && t < p.startTile + p.widthTiles) inPit = true;
-            });
+        chunk.clouds.forEach(cloud => {
+            ctx.drawImage(cloudSprite, chunkWorldX + cloud.x, cloud.y);
+        });
 
-            let currentGroundY = defaultGroundY;
-            chunk.steps.forEach(s => {
-                if (t >= s.startTile && t < s.startTile + s.widthTiles) currentGroundY = s.heightY;
-            });
-
-            if (!inPit) {
-                ctx.drawImage(groundTile, tileX, currentGroundY);
-                ctx.fillStyle = DIRT_BODY;
-                ctx.fillRect(tileX, currentGroundY + 32, 32, canvas.height - currentGroundY - 32);
+        // Conditionally render scenery structures matching active background context stage
+        if (c === 0) {
+            if (activeAct === 1) {
+                // Render Act 1 Home Scenery
+                ctx.drawImage(houseSprite, 30, 234);
+                ctx.fillStyle = 'rgba(100,110,120,0.5)'; // Darker soot smoke
+                let smokeY = 238 + Math.sin(Date.now() * 0.003) * 5;
+                ctx.fillRect(145, smokeY, 8, 8);
+                ctx.fillRect(150, smokeY - 12, 12, 12);
             } else {
-                ctx.fillStyle = '#4c1e13';
-                ctx.fillRect(tileX, defaultGroundY, 32, canvas.height - defaultGroundY);
-                ctx.drawImage(cliffWallTile, tileX, defaultGroundY);
-                ctx.drawImage(cliffWallTile, tileX, defaultGroundY + 32);
+                // Render Act 2 Bootcamp Training Towers
+                ctx.drawImage(campTowerSprite, 20, 194);
             }
         }
 
-        // Draw Foliage Assets On Core Surfaces
+        chunk.platforms.forEach(plat => {
+            ctx.drawImage(platformSprite, plat.currentGlobalX || (chunkWorldX + plat.localStartX), plat.y);
+        });
+
         chunk.trees.forEach(tree => {
-            ctx.drawImage(treeSprite, chunkOffset + tree.x, tree.y);
+            if (tree.isPlatformBound) {
+                const parentX = (tree.platRef.currentGlobalX || (chunkWorldX + tree.platRef.localStartX)) + tree.localXOffset;
+                const parentY = tree.platRef.y - 96;
+                ctx.drawImage(treeSprite, parentX, parentY);
+            } else {
+                ctx.drawImage(treeSprite, tree.x, tree.y);
+            }
         });
 
         chunk.bushes.forEach(bush => {
-            let bushY = defaultGroundY - 14;
-            chunk.steps.forEach(s => {
-                if ((bush.x/32) >= s.startTile && (bush.x/32) < s.startTile + s.widthTiles) bushY = s.heightY - 14;
-            });
-            ctx.drawImage(bushSprite, chunkOffset + bush.x, bushY);
+            ctx.drawImage(bushSprite, chunkWorldX + bush.x, 330);
         });
+
+        chunk.tramps.forEach(tramp => {
+            ctx.save();
+            ctx.translate(chunkWorldX + tramp.x, tramp.y);
+            if (tramp.animTime > 0) {
+                ctx.scale(1, 0.5);
+                ctx.translate(0, 16);
+            }
+            ctx.drawImage(trampSprite, 0, 0);
+            ctx.restore();
+        });
+
+        // Draw character configurations matching specific narrative window slots
+        if (c === 0 && inCutscene) {
+            if (activeAct === 1) {
+                ctx.drawImage(motherSprite, 50, 320);
+                ctx.drawImage(brotherSprite, 105, 330);
+            } else {
+                ctx.drawImage(sergeantSprite, 60, 320);
+            }
+        }
+
+        for (let t = 0; t < 13; t++) {
+            const tileWorldX = chunkWorldX + (t * 32);
+            const heightAt = getGroundHeightAt(tileWorldX);
+
+            if (heightAt !== 9999) { 
+                ctx.drawImage(groundTile, tileWorldX, heightAt);
+                for (let fillY = heightAt + 32; fillY < canvas.height; fillY += 32) {
+                    ctx.drawImage(cliffWallTile, tileWorldX, fillY);
+                }
+            } else {
+                const leftHeight = getGroundHeightAt(tileWorldX - 32);
+                if (leftHeight !== 9999) {
+                    for (let fillY = leftHeight; fillY < canvas.height; fillY += 32) ctx.drawImage(cliffWallTile, tileWorldX, fillY);
+                }
+                const rightHeight = getGroundHeightAt(tileWorldX + 32);
+                if (rightHeight !== 9999) {
+                    for (let fillY = rightHeight; fillY < canvas.height; fillY += 32) ctx.drawImage(cliffWallTile, tileWorldX, fillY);
+                }
+            }
+        }
     }
 
-    // --- STATIC PLAYABLE CHARACTER MOCKUP OVERLAY ---
-    ctx.drawImage(playerSprite, cameraX + 160, 322);
-
+    ctx.drawImage(playerSprite, player.x, player.y);
     ctx.restore();
 
-    // Cache cleanup routines
-    for (const key in activeChunks) {
-        if (key < startChunk - 4) delete activeChunks[key];
+    // --- DRAW LIVE CUTSCENE DIALOGUE BUBBLE HEADER ---
+    if (inCutscene) {
+        const currentLine = dialogueLines[dialogueIndex];
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 4;
+        ctx.fillRect(50, 300, 700, 110);
+        ctx.strokeRect(50, 300, 700, 110);
+
+        ctx.font = 'bold 18px "Courier New", monospace';
+        if (currentLine.speaker === "MOTHER") ctx.fillStyle = '#d81b60';
+        else if (currentLine.speaker === "BROTHER") ctx.fillStyle = '#f4d03f';
+        else if (currentLine.speaker === "DRILL SERGEANT") ctx.fillStyle = '#e67e22';
+        else ctx.fillStyle = '#7bc1fa';
+        
+        ctx.textAlign = 'left';
+        ctx.fillText(currentLine.speaker, 70, 330);
+
+        ctx.font = '14px "Courier New", monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(currentLine.text, 70, 365);
+
+        ctx.font = '10px "Courier New", monospace';
+        ctx.fillStyle = CLOUD_SHADOW;
+        ctx.textAlign = 'right';
+        ctx.fillText("Press SPACE to advance >>", 730, 395);
+    }
+
+    if (gameOver) {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = DIRT_DARK;
+        ctx.font = 'bold 44px "Courier New", monospace';
+        ctx.fillText('GAME OVER', canvas.width / 2 + 4, canvas.height / 2 - 16 + 4);
+        ctx.fillStyle = DIRT_TOP;
+        ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 16);
+        ctx.font = '16px "Courier New", monospace';
+        ctx.fillStyle = CLOUD_BODY;
+        ctx.fillText('Press SPACE Bar or Click to Restart', canvas.width / 2, canvas.height / 2 + 32);
     }
 }
 
-function tick() {
+function gameLoop() {
     update();
     draw();
-    requestAnimationFrame(tick);
+    requestAnimationFrame(gameLoop);
 }
 
-tick();
+gameLoop();
 </script>
 
 </body>
